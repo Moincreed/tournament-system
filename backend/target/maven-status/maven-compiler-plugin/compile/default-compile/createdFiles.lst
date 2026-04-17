@@ -42,7 +42,6 @@ com\tournament\dto\TournamentDto$CreateRequest$CreateRequestBuilder.class
 com\tournament\repository\TournamentRepository.class
 com\tournament\repository\TeamRepository.class
 com\tournament\service\LeaderboardService.class
-com\tournament\controller\TeamController.class
 com\tournament\entity\Leaderboard.class
 com\tournament\dto\MatchDto$InningsCompleteRequest.class
 com\tournament\security\JwtAuthFilter.class
@@ -51,7 +50,6 @@ com\tournament\dto\TeamDto$Response.class
 com\tournament\entity\Player$PlayerBuilder.class
 com\tournament\security\JwtUtil.class
 com\tournament\dto\MatchDto$TossUpdateRequest$TossUpdateRequestBuilder.class
-com\tournament\TournamentApplication.class
 com\tournament\dto\TournamentDto$CreateRequest.class
 com\tournament\config\SecurityConfig.class
 com\tournament\repository\UserRepository.class
@@ -67,8 +65,6 @@ com\tournament\dto\PlayerDto$CreateRequest$CreateRequestBuilder.class
 com\tournament\dto\MatchDto$LiveMatchResponse$LiveMatchResponseBuilder.class
 com\tournament\dto\TeamDto$CreateRequest$CreateRequestBuilder.class
 com\tournament\controller\MatchController.class
-com\tournament\security\CustomUserDetailsService.class
-com\tournament\controller\TournamentController.class
 com\tournament\dto\MatchDto$ScoreUpdateRequest.class
 com\tournament\exception\GlobalExceptionHandler.class
 com\tournament\controller\AuthController.class

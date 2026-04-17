@@ -63,10 +63,21 @@ public class TeamService {
         return toResponse(saved);
     }
 
+    // ✅ NEW METHOD (THIS FIXES YOUR ERROR)
+    @Transactional(readOnly = true)
+    public List<TeamDto.Response> getAllTeams() {
+        return teamRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public List<TeamDto.Response> getTeamsByTournament(Long tournamentId) {
         return teamRepository.findByTournamentId(tournamentId)
-                .stream().map(this::toResponse).collect(Collectors.toList());
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
