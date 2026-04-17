@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tournament Manager — Local Sports Hub</title>
+<script src="https://unpkg.com/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+<script src="https://unpkg.com/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+<style>
+  :root {
+    --green: #1D9E75; --green-dark: #0F6E56; --green-light: #E1F5EE;
+    --blue: #185FA5; --blue-light: #E6F1FB;
+    --red: #A32D2D; --red-light: #FCEBEB;
+    --amber: #854F0B; --amber-light: #FAEEDA;
+    --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB;
+    --gray-400: #9CA3AF; --gray-600: #4B5563; --gray-900: #111827;
+    --white: #FFFFFF; --border: #E5E7EB;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1);
+    --radius: 8px; --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--gray-50); color: var(--gray-900); font-size: 14px; }
+  
+  /* NAV */
+  .navbar { background: var(--white); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 32px; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .navbar-brand { font-size: 16px; font-weight: 600; color: var(--green); display: flex; align-items: center; gap: 8px; text-decoration: none; }
+  .nav-links { display: flex; gap: 4px; }
+  .nav-link { padding: 6px 14px; border-radius: var(--radius); font-size: 13px; cursor: pointer; color: var(--gray-600); border: none; background: none; transition: all 0.15s; }
+  .nav-link:hover { background: var(--gray-100); color: var(--gray-900); }
+  .nav-link.active { background: var(--green-light); color: var(--green); font-weight: 500; }
+  .navbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .user-badge { font-size: 12px; background: var(--gray-100); padding: 4px 12px; border-radius: 20px; color: var(--gray-600); }
+  
+  /* LAYOUT */
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .page { display: none; } .page.active { display: block; }
+  
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--white); color: var(--gray-900); transition: all 0.15s; }
+  .btn:hover { background: var(--gray-100); }
+  .btn-primary { background: var(--green); color: var(--white); border-color: var(--green); }
+  .btn-primary:hover { background: var(--green-dark); border-color: var(--green-dark); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { background: var(--red-light); color: var(--red); border-color: #F09595; }
+  .btn-whatsapp { background: #25D366; color: white; border-color: #25D366; }
+  .btn-share { background: var(--blue-light); color: var(--blue); border-color: #85B7EB; }
+
+  /* CARDS */
+  .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 0; }
+
+  /* GRID */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+  .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 16px; }
+  
+  /* STAT CARDS */
+  .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat-label { font-size: 12px; color: var(--gray-400); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-live { background: var(--red-light); color: var(--red); }
+  .badge-live::before { content: '●'; animation: pulse 1s infinite; }
+  .badge-upcoming { background: var(--blue-light); color: var(--blue); }
+  .badge-completed { background: var(--green-light); color: var(--green); }
+  .badge-ongoing { background: var(--amber-light); color: var(--amber); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* FORMS */
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--gray-600); }
+  .form-control { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; color: var(--gray-900); background: var(--white); width: 100%; transition: border-color 0.15s; }
+  .form-control:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(29,158,117,0.1); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-grid .full { grid-column: 1 / -1; }
+
+  /* MODAL */
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--white); border-radius: var(--radius-lg); padding: 24px; width: 480px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+  /* TABLES */
+  .table { width: 100%; border-collapse: collapse; }
+  .table th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; background: var(--gray-50); border-bottom: 1px solid var(--border); }
+  .table td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .table tr:last-child td { border-bottom: none; }
+  .table tr:hover td { background: var(--gray-50); }
+
+  /* SCORE DISPLAY */
+  .score-board { background: linear-gradient(135deg, #0F6E56 0%, #1D9E75 100%); border-radius: var(--radius-lg); padding: 24px; color: white; margin-bottom: 20px; }
+  .score-board .meta { font-size: 12px; opacity: 0.8; margin-bottom: 16px; }
+  .score-innings { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center; text-align: center; }
+  .score-team { }
+  .score-team-name { font-size: 14px; font-weight: 600; opacity: 0.9; margin-bottom: 4px; }
+  .score-runs { font-size: 42px; font-weight: 800; line-height: 1; }
+  .score-detail { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+  .score-vs { font-size: 20px; opacity: 0.5; font-weight: 700; }
+  .score-status { margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 13px; text-align: center; }
+
+  /* BALL EVENTS */
+  .ball-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px 16px; }
+  .ball-chip { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .ball-0 { background: var(--gray-100); color: var(--gray-600); }
+  .ball-1,.ball-2,.ball-3 { background: var(--gray-100); color: var(--gray-900); }
+  .ball-4 { background: var(--blue-light); color: var(--blue); }
+  .ball-6 { background: var(--green-light); color: var(--green-dark); }
+  .ball-W { background: var(--red-light); color: var(--red); }
+  .ball-Wd,.ball-Nb { background: var(--amber-light); color: var(--amber); }
+
+  /* SCORING BUTTONS */
+  .scoring-pad { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; padding: 16px; }
+  .score-btn { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 18px; font-weight: 700; cursor: pointer; background: var(--white); transition: all 0.1s; text-align: center; }
+  .score-btn:hover { transform: scale(1.05); }
+  .score-btn:active { transform: scale(0.97); }
+  .score-btn.r4 { background: var(--blue-light); color: var(--blue); border-color: #85B7EB; }
+  .score-btn.r6 { background: var(--green-light); color: var(--green-dark); border-color: #5DCAA5; }
+  .score-btn.w { background: var(--red-light); color: var(--red); border-color: #F09595; font-size: 14px; }
+  .score-btn.wd { background: var(--amber-light); color: var(--amber); border-color: #FAC775; font-size: 14px; }
+  .score-btn.nb { background: var(--amber-light); color: var(--amber); border-color: #FAC775; font-size: 14px; }
+
+  /* LEADERBOARD */
+  .rank-1 td:first-child { color: #F6B800; font-weight: 800; }
+  .rank-2 td:first-child { color: var(--gray-400); font-weight: 700; }
+  .rank-3 td:first-child { color: #CD7F32; font-weight: 700; }
+  .nrr-pos { color: var(--green); font-weight: 500; }
+  .nrr-neg { color: var(--red); font-weight: 500; }
+
+  /* PROGRESS */
+  .progress { height: 6px; background: var(--gray-200); border-radius: 3px; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.4s; }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 20px; font-size: 13px; font-weight: 500; z-index: 9999; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+
+  /* ALERT */
+  .alert { padding: 12px 16px; border-radius: var(--radius); font-size: 13px; margin-bottom: 16px; }
+  .alert-info { background: var(--blue-light); color: var(--blue); border: 1px solid #85B7EB; }
+  .alert-success { background: var(--green-light); color: var(--green-dark); border: 1px solid #5DCAA5; }
+  .alert-error { background: var(--red-light); color: var(--red); border: 1px solid #F09595; }
+
+  /* EMPTY STATE */
+  .empty { text-align: center; padding: 48px 24px; color: var(--gray-400); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-title { font-size: 15px; font-weight: 500; color: var(--gray-600); margin-bottom: 6px; }
+  
+  /* AUTH */
+  .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--gray-50); }
+  .auth-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 36px; width: 380px; }
+  .auth-logo { text-align: center; margin-bottom: 24px; }
+  .auth-logo-icon { font-size: 40px; }
+  .auth-logo-title { font-size: 20px; font-weight: 700; color: var(--green); }
+  .auth-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  .auth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--gray-400); border-bottom: 2px solid transparent; }
+  .auth-tab.active { color: var(--green); border-bottom-color: var(--green); }
+
+  /* PUBLIC MATCH PAGE */
+  .public-hero { background: linear-gradient(135deg, #0F6E56, #1D9E75); color: white; padding: 32px; border-radius: var(--radius-lg); margin-bottom: 20px; text-align: center; }
+  .public-hero h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+  .public-hero p { opacity: 0.8; font-size: 13px; }
+
+  /* TEAM COLOR DOT */
+  .team-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .container { padding: 16px; }
+    .score-runs { font-size: 28px; }
+    .scoring-pad { grid-template-columns: repeat(4,1fr); gap: 6px; }
+    .score-btn { padding: 10px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== AUTH PAGE ==================== -->
+<div id="auth-page">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="auth-logo-icon">🏏</div>
+        <div class="auth-logo-title">Tournament Manager</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Local Sports Management Platform</div>
+      </div>
+      <div id="auth-error" class="alert alert-error" style="display:none;"></div>
+      <div class="auth-tabs">
+        <div class="auth-tab active" onclick="switchAuth('login')">Login</div>
+        <div class="auth-tab" onclick="switchAuth('register')">Register</div>
+      </div>
+      <div id="login-form">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="login-email" type="email" placeholder="you@example.com"></div>
+          <div class="form-group"><label class="form-label">Password</label><input class="form-control" id="login-password" type="password" placeholder="Password"></div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px;" onclick="login()">Login</button>
+          <div style="text-align:center;font-size:12px;color:var(--gray-400);">
+            Demo: <code>demo@tournament.local</code> / <code>Demo@123</code>
+          </div>
+        </div>
+      </div>
+      <div id="register-form" style="display:none;">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="reg-name" placeholder="Ramesh Sharma"></div>
+          <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="reg-email" type="email" placeholder="you@example.com"></div>
+          <div class="form-group"><label class="form-label">Password (min 6 chars)</label><input class="form-control" id="reg-password" type="password" placeholder="Password"></div>
+          <div class="form-group"><label class="form-label">Phone (optional)</label><input class="form-control" id="reg-phone" placeholder="9876543210"></div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px;" onclick="register()">Create Account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MAIN APP ==================== -->
+<div id="main-app" style="display:none;">
+  <nav class="navbar">
+    <a class="navbar-brand" href="#" onclick="showPage('dashboard')">🏏 Tournament Manager</a>
+    <div class="nav-links">
+      <button class="nav-link active" onclick="showPage('dashboard')">Dashboard</button>
+      <button class="nav-link" onclick="showPage('tournaments')">Tournaments</button>
+      <button class="nav-link" onclick="showPage('fixtures')">Fixtures</button>
+      <button class="nav-link" onclick="showPage('scoring')">Live Scoring</button>
+      <button class="nav-link" onclick="showPage('leaderboard')">Leaderboard</button>
+      <button class="nav-link" onclick="showPage('players')">Players</button>
+    </div>
+    <div class="navbar-right">
+      <span class="user-badge" id="nav-username">...</span>
+      <button class="btn btn-sm btn-danger" onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- DASHBOARD PAGE -->
+    <div id="page-dashboard" class="page active">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h1 style="font-size:20px;font-weight:700;">Dashboard</h1>
+        <button class="btn btn-primary" onclick="openModal('modal-create-tournament')">+ New Tournament</button>
+      </div>
+      <div class="grid-4" style="margin-bottom:24px;">
+        <div class="stat-card"><div class="stat-label">Tournaments</div><div class="stat-value" id="stat-tournaments" style="color:var(--green)">—</div><div class="stat-sub">Your tournaments</div></div>
+        <div class="stat-card"><div class="stat-label">Live Now</div><div class="stat-value" id="stat-live" style="color:var(--red)">—</div><div class="stat-sub">Matches in progress</div></div>
+        <div class="stat-card"><div class="stat-label">Teams</div><div class="stat-value" id="stat-teams">—</div><div class="stat-sub">Across all events</div></div>
+        <div class="stat-card"><div class="stat-label">Players</div><div class="stat-value" id="stat-players">—</div><div class="stat-sub">Total registered</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Live & Recent Matches</span><span class="badge badge-live" id="live-count-badge">Loading...</span></div>
+          <div class="card-body"><div id="dashboard-matches"><div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No matches yet</div></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">My Tournaments</span></div>
+          <div class="card-body"><div id="dashboard-tournaments"><div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">No tournaments yet</div><button class="btn btn-primary btn-sm" onclick="openModal('modal-create-tournament')" style="margin-top:12px;">Create First Tournament</button></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOURNAMENTS PAGE -->
+    <div id="page-tournaments" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h1 style="font-size:20px;font-weight:700;">My Tournaments</h1>
+        <button class="btn btn-primary" onclick="openModal('modal-create-tournament')">+ New Tournament</button>
+      </div>
+      <div class="grid-auto" id="tournaments-grid">
+        <div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">Loading tournaments...</div></div>
+      </div>
+    </div>
+
+    <!-- FIXTURES PAGE -->
+    <div id="page-fixtures" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <h1 style="font-size:20px;font-weight:700;">Fixtures</h1>
+          <div style="margin-top:6px;">
+            <select class="form-control" id="fixtures-tournament-select" onchange="loadFixtures()" style="width:260px;display:inline-block;">
+              <option value="">— Select Tournament —</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-generate-fixtures" onclick="generateFixtures()" style="display:none;">⚡ Generate Fixtures</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title" id="fixtures-title">Match Schedule</span></div>
+        <div class="card-body"><div id="fixtures-list"><div class="empty"><div class="empty-icon">📅</div><div class="empty-title">Select a tournament to view fixtures</div></div></div></div>
+      </div>
+    </div>
+
+    <!-- LIVE SCORING PAGE -->
+    <div id="page-scoring" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <h1 style="font-size:20px;font-weight:700;">Live Scoring</h1>
+          <div style="margin-top:6px;">
+            <select class="form-control" id="scoring-match-select" onchange="loadMatchForScoring()" style="width:300px;display:inline-block;">
+              <option value="">— Select Live/Upcoming Match —</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;" id="scoring-actions" style="display:none;">
+          <button class="btn btn-share btn-sm" id="btn-copy-link" onclick="copyMatchLink()">🔗 Copy Link</button>
+          <button class="btn btn-whatsapp btn-sm" id="btn-whatsapp" onclick="shareWhatsApp()">WhatsApp</button>
+        </div>
+      </div>
+
+      <div id="scoring-area">
+        <div class="empty"><div class="empty-icon">🏏</div><div class="empty-title">Select a match to start scoring</div></div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD PAGE -->
+    <div id="page-leaderboard" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <h1 style="font-size:20px;font-weight:700;">Leaderboard</h1>
+          <div style="margin-top:6px;">
+            <select class="form-control" id="leaderboard-tournament-select" onchange="loadLeaderboard()" style="width:260px;display:inline-block;">
+              <option value="">— Select Tournament —</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-share btn-sm" onclick="copyLeaderboardLink()">🔗 Share Table</button>
+      </div>
+      <div id="leaderboard-area"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">Select a tournament to view standings</div></div></div>
+    </div>
+
+    <!-- PLAYERS PAGE -->
+    <div id="page-players" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <h1 style="font-size:20px;font-weight:700;">Players</h1>
+          <div style="margin-top:6px;display:flex;gap:8px;">
+            <select class="form-control" id="players-tournament-select" onchange="loadTeamsForPlayers()" style="width:200px;">
+              <option value="">— Tournament —</option>
+            </select>
+            <select class="form-control" id="players-team-select" onchange="loadPlayers()" style="width:180px;">
+              <option value="">— Team —</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddPlayerModal()">+ Add Player</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title" id="players-title">Players</span></div>
+        <div class="card-body"><div id="players-list"><div class="empty"><div class="empty-icon">👤</div><div class="empty-title">Select a team to view players</div></div></div></div>
+      </div>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /main-app -->
+
+<!-- ==================== MODALS ==================== -->
+
+<!-- Create Tournament -->
+<div class="modal-backdrop" id="modal-create-tournament">
+  <div class="modal">
+    <div class="modal-title">🏆 Create Tournament</div>
+    <div id="modal-error" class="alert alert-error" style="display:none;"></div>
+    <div class="form-grid">
+      <div class="form-group full"><label class="form-label">Tournament Name *</label><input class="form-control" id="t-name" placeholder="e.g. Gaon Cup 2024"></div>
+      <div class="form-group"><label class="form-label">Sport *</label><select class="form-control" id="t-sport"><option value="CRICKET">Cricket</option><option value="FOOTBALL">Football</option><option value="KABADDI">Kabaddi</option><option value="VOLLEYBALL">Volleyball</option><option value="BADMINTON">Badminton</option></select></div>
+      <div class="form-group"><label class="form-label">Format</label><select class="form-control" id="t-format"><option value="ROUND_ROBIN">Round Robin</option><option value="KNOCKOUT">Knockout</option><option value="LEAGUE_CUM_KNOCKOUT">League + Knockout</option></select></div>
+      <div class="form-group full"><label class="form-label">Location / Venue *</label><input class="form-control" id="t-location" placeholder="Village Ground, Rampur"></div>
+      <div class="form-group"><label class="form-label">Start Date *</label><input class="form-control" id="t-start" type="date"></div>
+      <div class="form-group"><label class="form-label">End Date *</label><input class="form-control" id="t-end" type="date"></div>
+      <div class="form-group"><label class="form-label">Overs per Innings</label><input class="form-control" id="t-overs" type="number" value="20" min="1"></div>
+      <div class="form-group"><label class="form-label">Max Teams</label><input class="form-control" id="t-maxteams" type="number" value="8" min="2" max="16"></div>
+      <div class="form-group full"><label class="form-label">Description</label><textarea class="form-control" id="t-desc" rows="2" placeholder="Annual village championship..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-create-tournament')">Cancel</button>
+      <button class="btn btn-primary" onclick="createTournament()">Create Tournament</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Team -->
+<div class="modal-backdrop" id="modal-add-team">
+  <div class="modal">
+    <div class="modal-title">👥 Add Team</div>
+    <div class="form-grid">
+      <div class="form-group full"><label class="form-label">Team Name *</label><input class="form-control" id="tm-name" placeholder="e.g. Rampur XI"></div>
+      <div class="form-group"><label class="form-label">Captain Name</label><input class="form-control" id="tm-captain" placeholder="Mahesh Kumar"></div>
+      <div class="form-group"><label class="form-label">Home Ground</label><input class="form-control" id="tm-ground" placeholder="Village Ground"></div>
+      <div class="form-group"><label class="form-label">Team Color</label><input class="form-control" id="tm-color" type="color" value="#1D9E75"></div>
+      <div class="form-group"><label class="form-label">Logo URL (optional)</label><input class="form-control" id="tm-logo" placeholder="https://..."></div>
+      <input type="hidden" id="tm-tournament-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-add-team')">Cancel</button>
+      <button class="btn btn-primary" onclick="addTeam()">Add Team</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Player -->
+<div class="modal-backdrop" id="modal-add-player">
+  <div class="modal">
+    <div class="modal-title">👤 Add Player</div>
+    <div class="form-grid">
+      <div class="form-group full"><label class="form-label">Player Name *</label><input class="form-control" id="pl-name" placeholder="Full name"></div>
+      <div class="form-group"><label class="form-label">Jersey Number</label><input class="form-control" id="pl-jersey" type="number" placeholder="#7"></div>
+      <div class="form-group"><label class="form-label">Age</label><input class="form-control" id="pl-age" type="number" placeholder="25"></div>
+      <div class="form-group"><label class="form-label">Role</label><select class="form-control" id="pl-role"><option value="BATSMAN">Batsman</option><option value="BOWLER">Bowler</option><option value="ALL_ROUNDER" selected>All Rounder</option><option value="WICKET_KEEPER">Wicket Keeper</option></select></div>
+      <div class="form-group"><label class="form-label">Batting Style</label><select class="form-control" id="pl-bat"><option value="RIGHT_HAND">Right Hand</option><option value="LEFT_HAND">Left Hand</option></select></div>
+      <div class="form-group full"><label class="form-label">Bowling Style</label><select class="form-control" id="pl-bowl"><option value="">Not a bowler</option><option value="RIGHT_ARM_FAST">Right Arm Fast</option><option value="RIGHT_ARM_MEDIUM">Right Arm Medium</option><option value="RIGHT_ARM_SPIN">Right Arm Spin</option><option value="LEFT_ARM_FAST">Left Arm Fast</option><option value="LEFT_ARM_MEDIUM">Left Arm Medium</option><option value="LEFT_ARM_SPIN">Left Arm Spin</option></select></div>
+      <div class="form-group full"><label class="form-label">Phone (optional)</label><input class="form-control" id="pl-phone" placeholder="9876543210"></div>
+      <input type="hidden" id="pl-team-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-add-player')">Cancel</button>
+      <button class="btn btn-primary" onclick="addPlayer()">Add Player</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toss Modal -->
+<div class="modal-backdrop" id="modal-toss">
+  <div class="modal">
+    <div class="modal-title">🪙 Record Toss</div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="form-group"><label class="form-label">Toss Winner</label><select class="form-control" id="toss-winner"><option value="">Select team</option></select></div>
+      <div class="form-group"><label class="form-label">Elected to</label><select class="form-control" id="toss-decision"><option value="BAT">Bat</option><option value="BOWL">Bowl</option></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-toss')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveToss()">Start Match ▶</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ================================================================
+// CONFIG — Update this to your backend URL
+// ================================================================
+const API_BASE = 'http://localhost:8080';
+// When deployed: const API_BASE = 'https://your-app.railway.app';
+
+// ================================================================
+// STATE
+// ================================================================
+let token = localStorage.getItem('token') || null;
+let currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+let currentMatchId = null;
+let currentTournamentId = null;
+let stompClient = null;
+let allTournaments = [];
+
+// ================================================================
+// API HELPER
+// ================================================================
+async function api(method, path, body = null, requiresAuth = true) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (requiresAuth && token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, {
+    method, headers,
+    body: body ? JSON.stringify(body) : null
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || data.message || 'Request failed');
+  return data.data !== undefined ? data.data : data;
+}
+
+// ================================================================
+// AUTH
+// ================================================================
+function switchAuth(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i) => t.classList.toggle('active', (i===0&&tab==='login')||(i===1&&tab==='register')));
+  document.getElementById('login-form').style.display = tab==='login'?'block':'none';
+  document.getElementById('register-form').style.display = tab==='register'?'block':'none';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+async function login() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) { showAuthError('Please enter email and password'); return; }
+  try {
+    const data = await api('POST', '/auth/login', { email, password }, false);
+    saveSession(data);
+  } catch(e) { showAuthError(e.message); }
+}
+
+async function register() {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const phone = document.getElementById('reg-phone').value.trim();
+  if (!name || !email || !password) { showAuthError('Please fill required fields'); return; }
+  if (password.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
+  try {
+    const data = await api('POST', '/auth/register', { name, email, password, phone }, false);
+    saveSession(data);
+  } catch(e) { showAuthError(e.message); }
+}
+
+function saveSession(data) {
+  token = data.token;
+  currentUser = { id: data.userId, name: data.name, email: data.email, role: data.role };
+  localStorage.setItem('token', token);
+  localStorage.setItem('currentUser', JSON.stringify(currentUser));
+  initApp();
+}
+
+function logout() {
+  token = null; currentUser = null;
+  localStorage.removeItem('token'); localStorage.removeItem('currentUser');
+  document.getElementById('auth-page').style.display = 'block';
+  document.getElementById('main-app').style.display = 'none';
+  if (stompClient) stompClient.deactivate();
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ================================================================
+// APP INIT
+// ================================================================
+async function initApp() {
+  document.getElementById('auth-page').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  document.getElementById('nav-username').textContent = currentUser.name;
+  await loadAllTournaments();
+  loadDashboard();
+  populateTournamentSelects();
+}
+
+async function loadAllTournaments() {
+  try {
+    const data = await api('GET', '/tournaments/my?size=50');
+    allTournaments = data.content || data || [];
+  } catch(e) { allTournaments = []; }
+}
+
+function populateTournamentSelects() {
+  const selects = ['fixtures-tournament-select','leaderboard-tournament-select','players-tournament-select'];
+  selects.forEach(id => {
+    const sel = document.getElementById(id);
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Select Tournament —</option>';
+    allTournaments.forEach(t => {
+      sel.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+    });
+    if (current) sel.value = current;
+  });
+  // Scoring: populate with all matches
+  loadLiveMatchesForScoring();
+}
+
+// ================================================================
+// DASHBOARD
+// ================================================================
+async function loadDashboard() {
+  // Stats
+  document.getElementById('stat-tournaments').textContent = allTournaments.length;
+  // Load live matches
+  try {
+    const live = await api('GET', '/matches/live', null, false);
+    document.getElementById('stat-live').textContent = live.length;
+    document.getElementById('live-count-badge').textContent = live.length + ' Live';
+    renderDashboardMatches(live);
+  } catch(e) { document.getElementById('stat-live').textContent = '0'; }
+  renderDashboardTournaments();
+}
+
+function renderDashboardMatches(liveMatches) {
+  const container = document.getElementById('dashboard-matches');
+  if (!liveMatches.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No live matches</div></div>';
+    return;
+  }
+  container.innerHTML = liveMatches.map(m => `
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${m.teamAName} <span style="color:var(--gray-400);font-weight:400;">vs</span> ${m.teamBName}</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px;">${m.tournamentName}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;font-weight:700;">${m.innings1Runs}/${m.innings1Wickets}</div>
+        <div style="font-size:11px;color:var(--gray-400);">${formatOvers(m.innings1Overs)} ov</div>
+      </div>
+      <span class="badge badge-live">Live</span>
+    </div>
+  `).join('');
+}
+
+function renderDashboardTournaments() {
+  const container = document.getElementById('dashboard-tournaments');
+  let totalTeams = 0, totalPlayers = 0;
+  if (!allTournaments.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">No tournaments yet</div><button class="btn btn-primary btn-sm" onclick="openModal('modal-create-tournament')" style="margin-top:12px;">Create First Tournament</button></div>`;
+    return;
+  }
+  container.innerHTML = allTournaments.slice(0,4).map(t => {
+    totalTeams += (t.teamsRegistered || 0);
+    const pct = t.matchesPlayed && t.maxTeams ? Math.min(100, Math.round((t.matchesPlayed / (t.maxTeams*(t.maxTeams-1)/2)) * 100)) : 0;
+    return `<div style="padding:12px 20px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;font-weight:600;">${t.name}</span>
+        <span class="badge badge-${t.status.toLowerCase()}">${t.status}</span>
+      </div>
+      <div style="font-size:11px;color:var(--gray-400);margin-bottom:8px;">${t.sportType} · ${t.location} · ${t.teamsRegistered || 0} teams</div>
+      <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+  document.getElementById('stat-teams').textContent = totalTeams;
+  document.getElementById('stat-players').textContent = totalTeams * 11 + '+';
+}
+
+// ================================================================
+// TOURNAMENTS PAGE
+// ================================================================
+async function loadTournamentsPage() {
+  await loadAllTournaments();
+  populateTournamentSelects();
+  const grid = document.getElementById('tournaments-grid');
+  if (!allTournaments.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🏆</div><div class="empty-title">No tournaments yet</div><button class="btn btn-primary" onclick="openModal('modal-create-tournament')" style="margin-top:12px;">Create First Tournament</button></div>`;
+    return;
+  }
+  grid.innerHTML = allTournaments.map(t => `
+    <div class="card">
+      <div style="padding:18px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-size:15px;font-weight:700;">${t.name}</div>
+          <span class="badge badge-${t.status.toLowerCase()}">${t.status}</span>
+        </div>
+        <div style="font-size:12px;color:var(--gray-400);line-height:1.8;">
+          🏏 ${t.sportType} · ${t.format.replace('_',' ')}<br>
+          📍 ${t.location}<br>
+          📅 ${t.startDate} → ${t.endDate}<br>
+          ⏱ ${t.oversPerInnings} overs · Max ${t.maxTeams} teams
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0;">
+          <div style="text-align:center;background:var(--gray-50);border-radius:var(--radius);padding:8px 4px;">
+            <div style="font-size:18px;font-weight:700;">${t.teamsRegistered || 0}</div><div style="font-size:10px;color:var(--gray-400);">Teams</div>
+          </div>
+          <div style="text-align:center;background:var(--gray-50);border-radius:var(--radius);padding:8px 4px;">
+            <div style="font-size:18px;font-weight:700;">${t.matchesPlayed || 0}</div><div style="font-size:10px;color:var(--gray-400);">Matches</div>
+          </div>
+          <div style="text-align:center;background:var(--gray-50);border-radius:var(--radius);padding:8px 4px;">
+            <div style="font-size:18px;font-weight:700;">${(t.teamsRegistered || 0) * 11}+</div><div style="font-size:10px;color:var(--gray-400);">Players</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="openAddTeamModal(${t.id})">+ Team</button>
+          <button class="btn btn-sm" onclick="document.getElementById('fixtures-tournament-select').value='${t.id}';showPage('fixtures');loadFixtures();">Fixtures</button>
+          <button class="btn btn-sm" onclick="document.getElementById('leaderboard-tournament-select').value='${t.id}';showPage('leaderboard');loadLeaderboard();">Leaderboard</button>
+          <button class="btn btn-share btn-sm" onclick="sharePublic('tournament',${t.id})">🔗 Share</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function createTournament() {
+  const name = document.getElementById('t-name').value.trim();
+  const location = document.getElementById('t-location').value.trim();
+  const startDate = document.getElementById('t-start').value;
+  const endDate = document.getElementById('t-end').value;
+  if (!name || !location || !startDate || !endDate) { showModalError('modal-create-tournament','Please fill all required fields'); return; }
+  try {
+    await api('POST', '/tournaments', {
+      name, location, description: document.getElementById('t-desc').value,
+      startDate, endDate,
+      sportType: document.getElementById('t-sport').value,
+      format: document.getElementById('t-format').value,
+      oversPerInnings: parseInt(document.getElementById('t-overs').value),
+      maxTeams: parseInt(document.getElementById('t-maxteams').value)
+    });
+    closeModal('modal-create-tournament');
+    toast('✅ Tournament created!');
+    await loadAllTournaments();
+    populateTournamentSelects();
+    loadTournamentsPage();
+    loadDashboard();
+  } catch(e) { showModalError('modal-create-tournament', e.message); }
+}
+
+// ================================================================
+// TEAMS
+// ================================================================
+function openAddTeamModal(tournamentId) {
+  document.getElementById('tm-tournament-id').value = tournamentId;
+  document.getElementById('tm-name').value = '';
+  document.getElementById('tm-captain').value = '';
+  document.getElementById('tm-ground').value = '';
+  openModal('modal-add-team');
+}
+
+async function addTeam() {
+  const tournamentId = document.getElementById('tm-tournament-id').value;
+  const name = document.getElementById('tm-name').value.trim();
+  if (!name) { toast('❌ Team name is required'); return; }
+  try {
+    await api('POST', '/teams', {
+      name, tournamentId: parseInt(tournamentId),
+      captainName: document.getElementById('tm-captain').value,
+      homeGround: document.getElementById('tm-ground').value,
+      colorCode: document.getElementById('tm-color').value
+    });
+    closeModal('modal-add-team');
+    toast('✅ Team added!');
+    loadTournamentsPage();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+// ================================================================
+// FIXTURES
+// ================================================================
+async function loadFixtures() {
+  const tid = document.getElementById('fixtures-tournament-select').value;
+  if (!tid) return;
+  currentTournamentId = tid;
+  const t = allTournaments.find(t => t.id == tid);
+  document.getElementById('fixtures-title').textContent = t ? t.name + ' — Schedule' : 'Match Schedule';
+  document.getElementById('btn-generate-fixtures').style.display = 'inline-flex';
+  try {
+    const matches = await api('GET', `/matches/tournament/${tid}`, null, false);
+    renderFixtures(matches, t);
+  } catch(e) { document.getElementById('fixtures-list').innerHTML = `<div class="empty"><div class="empty-title">${e.message}</div></div>`; }
+}
+
+function renderFixtures(matches, tournament) {
+  const container = document.getElementById('fixtures-list');
+  if (!matches.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">No fixtures yet</div><p style="font-size:12px;margin-top:8px;">Click "Generate Fixtures" to create a round-robin schedule</p></div>`;
+    return;
+  }
+  container.innerHTML = `<table class="table">
+    <thead><tr><th>#</th><th>Match</th><th>Date</th><th>Venue</th><th>Score</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+    ${matches.map(m => `<tr>
+      <td style="color:var(--gray-400);font-weight:500;">#${m.matchNumber}</td>
+      <td><strong>${m.teamAName}</strong> <span style="color:var(--gray-400)">vs</span> <strong>${m.teamBName}</strong></td>
+      <td>${m.matchDate || '—'}</td>
+      <td style="color:var(--gray-400)">${m.venue || '—'}</td>
+      <td>${m.status === 'COMPLETED' ? `<strong>${m.resultDescription || 'Completed'}</strong>` : m.status === 'LIVE' || m.status === 'INNINGS_BREAK' ? `<strong>${m.innings1Runs}/${m.innings1Wickets}</strong> <span style="color:var(--gray-400)">${formatOvers(m.innings1Overs)} ov</span>` : '—'}</td>
+      <td><span class="badge badge-${m.status.toLowerCase().replace('_','-')}">${m.status.replace('_',' ')}</span></td>
+      <td>
+        ${m.status === 'UPCOMING' || m.status === 'LIVE' || m.status === 'INNINGS_BREAK' ? `<button class="btn btn-primary btn-sm" onclick="selectMatchForScoring(${m.id})">Score</button>` : ''}
+        <button class="btn btn-sm" onclick="copyLink('/matches/public/${m.publicCode}')">🔗</button>
+      </td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function generateFixtures() {
+  const tid = document.getElementById('fixtures-tournament-select').value;
+  if (!tid) { toast('Select a tournament first'); return; }
+  if (!confirm('Generate round-robin fixtures? This cannot be undone.')) return;
+  try {
+    await api('POST', `/matches/generate/${tid}`);
+    toast('✅ Fixtures generated!');
+    loadFixtures();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+// ================================================================
+// LIVE SCORING
+// ================================================================
+async function loadLiveMatchesForScoring() {
+  const sel = document.getElementById('scoring-match-select');
+  sel.innerHTML = '<option value="">— Select Match —</option>';
+  try {
+    // Load from all tournaments
+    for (const t of allTournaments) {
+      const matches = await api('GET', `/matches/tournament/${t.id}`, null, false);
+      const active = matches.filter(m => m.status !== 'COMPLETED' && m.status !== 'ABANDONED');
+      if (active.length) {
+        sel.innerHTML += `<optgroup label="${t.name}">`;
+        active.forEach(m => {
+          sel.innerHTML += `<option value="${m.id}">[${m.status}] ${m.teamAName} vs ${m.teamBName} — #${m.matchNumber}</option>`;
+        });
+        sel.innerHTML += `</optgroup>`;
+      }
+    }
+  } catch(e) {}
+}
+
+function selectMatchForScoring(matchId) {
+  document.getElementById('scoring-match-select').value = matchId;
+  showPage('scoring');
+  loadMatchForScoring();
+}
+
+async function loadMatchForScoring() {
+  const matchId = document.getElementById('scoring-match-select').value;
+  if (!matchId) { document.getElementById('scoring-area').innerHTML = '<div class="empty"><div class="empty-icon">🏏</div><div class="empty-title">Select a match to start scoring</div></div>'; return; }
+  currentMatchId = matchId;
+  document.getElementById('scoring-actions').style.display = 'flex';
+  try {
+    const data = await api('GET', `/matches/${matchId}/live`, null, false);
+    renderScoringArea(data.match, data.recentBalls || []);
+    subscribeToMatch(matchId);
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+function renderScoringArea(match, recentBalls) {
+  const canScore = match.status === 'LIVE' || match.status === 'INNINGS_BREAK';
+  const isLive = match.status === 'LIVE';
+  const isBreak = match.status === 'INNINGS_BREAK';
+
+  document.getElementById('scoring-area').innerHTML = `
+    <div class="score-board">
+      <div class="meta">⚡ ${match.tournamentName} · Match #${match.matchNumber} · ${match.oversPerInnings} overs · ${match.venue || 'TBD'}</div>
+      <div class="score-innings">
+        <div class="score-team">
+          <div class="score-team-name">${match.teamAName}</div>
+          <div class="score-runs" id="live-score-a">${match.innings1Runs}/${match.innings1Wickets}</div>
+          <div class="score-detail" id="live-overs-a">${formatOvers(match.innings1Overs)} ov · RR: ${match.innings1RunRate || 0}</div>
+        </div>
+        <div class="score-vs">VS</div>
+        <div class="score-team">
+          <div class="score-team-name">${match.teamBName}</div>
+          <div class="score-runs" id="live-score-b">${match.currentInnings === 2 ? match.innings2Runs + '/' + match.innings2Wickets : '—'}</div>
+          <div class="score-detail" id="live-overs-b">${match.currentInnings === 2 ? formatOvers(match.innings2Overs) + ' ov · RR: ' + (match.innings2RunRate||0) : (match.target ? 'Target: ' + match.target : 'Batting 2nd')}</div>
+        </div>
+      </div>
+      ${match.resultDescription ? `<div class="score-status">🏆 ${match.resultDescription}</div>` : ''}
+      ${isBreak ? `<div class="score-status">⏸ Innings Break — <button class="btn btn-sm" style="background:white;color:var(--green-dark);" onclick="startInnings2(${match.id})">Start 2nd Innings ▶</button></div>` : ''}
+      ${match.status === 'UPCOMING' ? `<div class="score-status"><button class="btn btn-sm" style="background:white;color:var(--green-dark);" onclick="openTossModal(${match.id},'${match.teamAName}',${match.teamAId},'${match.teamBName}',${match.teamBId})">🪙 Record Toss & Start Match</button></div>` : ''}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Ball by Ball — Over ${match.currentInnings === 2 ? Math.floor(match.innings2Overs) + 1 : Math.floor(match.innings1Overs) + 1}</span></div>
+        <div class="ball-row" id="ball-strip">
+          ${recentBalls.slice(-6).map(b => `<div class="ball-chip ball-${b.isWicket ? 'W' : b.runsScored}">${b.isWicket ? 'W' : b.ballType === 'WIDE' ? 'Wd' : b.ballType === 'NO_BALL' ? 'Nb' : b.runsScored}</div>`).join('')}
+        </div>
+        ${isLive ? `
+        <div class="card-header" style="border-top:1px solid var(--border);"><span class="card-title">Add Ball Event</span></div>
+        <div class="scoring-pad">
+          <button class="score-btn" onclick="recordBall(0)">0</button>
+          <button class="score-btn" onclick="recordBall(1)">1</button>
+          <button class="score-btn" onclick="recordBall(2)">2</button>
+          <button class="score-btn" onclick="recordBall(3)">3</button>
+          <button class="score-btn r4" onclick="recordBall(4)">4</button>
+          <button class="score-btn r6" onclick="recordBall(6)">6</button>
+          <button class="score-btn w" onclick="recordBall(0,true)">WICKET</button>
+          <button class="score-btn wd" onclick="recordExtra('WIDE')">Wide</button>
+          <button class="score-btn nb" onclick="recordExtra('NO_BALL')">No Ball</button>
+        </div>
+        <div style="padding:0 16px 16px;display:flex;gap:8px;">
+          <input class="form-control" id="commentary-input" placeholder="Commentary (optional)..." style="font-size:12px;">
+        </div>
+        ` : ''}
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Match Info</span></div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+          ${match.tossWinnerName ? `<div style="font-size:13px;">🪙 Toss: <strong>${match.tossWinnerName}</strong> elected to <strong>${match.tossDecision}</strong></div>` : ''}
+          ${match.battingFirstTeamName ? `<div style="font-size:13px;">🏏 Batting first: <strong>${match.battingFirstTeamName}</strong></div>` : ''}
+          ${match.currentBattingTeamName ? `<div style="font-size:13px;">⚡ Currently batting: <strong>${match.currentBattingTeamName}</strong></div>` : ''}
+          ${match.target ? `<div style="font-size:13px;">🎯 Target: <strong>${match.target}</strong></div>` : ''}
+          <div style="font-size:13px;">📍 Venue: ${match.venue || 'TBD'}</div>
+          <div style="font-size:13px;">📅 Date: ${match.matchDate || '—'}</div>
+          <hr style="border:none;border-top:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--gray-400);">Share link:</div>
+          <code style="font-size:12px;background:var(--gray-50);padding:6px 10px;border-radius:var(--radius);display:block;">${window.location.origin}?match=${match.publicCode}</code>
+          ${match.status === 'LIVE' ? `
+          <button class="btn btn-danger btn-sm" onclick="confirmEndMatch(${match.id},'${match.teamAName}',${match.teamAId},'${match.teamBName}',${match.teamBId})">🏁 End & Declare Result</button>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function recordBall(runs, isWicket = false) {
+  if (!currentMatchId) return;
+  const commentary = document.getElementById('commentary-input')?.value || '';
+  try {
+    const data = await api('POST', `/matches/${currentMatchId}/score`, {
+      runsScored: runs, ballType: 'NORMAL', isWicket, extraRuns: 0, commentary
+    });
+    // Add to ball strip
+    const strip = document.getElementById('ball-strip');
+    if (strip) {
+      const chip = document.createElement('div');
+      chip.className = `ball-chip ball-${isWicket ? 'W' : runs}`;
+      chip.textContent = isWicket ? 'W' : runs;
+      strip.appendChild(chip);
+      if (strip.children.length > 12) strip.removeChild(strip.firstChild);
+    }
+    // Update scores
+    updateLiveScoreDisplay(data);
+    if (document.getElementById('commentary-input')) document.getElementById('commentary-input').value = '';
+    toast(isWicket ? '🔴 WICKET!' : runs === 4 ? '🔵 FOUR!' : runs === 6 ? '🟢 SIX!' : `✅ ${runs} run(s)`);
+    if (data.status === 'INNINGS_BREAK' || data.status === 'COMPLETED') {
+      setTimeout(() => loadMatchForScoring(), 800);
+    }
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function recordExtra(type) {
+  if (!currentMatchId) return;
+  try {
+    await api('POST', `/matches/${currentMatchId}/score`, {
+      runsScored: 0, ballType: type, isWicket: false, extraRuns: 1
+    });
+    const strip = document.getElementById('ball-strip');
+    if (strip) {
+      const chip = document.createElement('div');
+      chip.className = `ball-chip ball-${type === 'WIDE' ? 'Wd' : 'Nb'}`;
+      chip.textContent = type === 'WIDE' ? 'Wd' : 'Nb';
+      strip.appendChild(chip);
+    }
+    toast(`✅ ${type === 'WIDE' ? 'Wide' : 'No Ball'} recorded (+1)`);
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+function updateLiveScoreDisplay(match) {
+  const sa = document.getElementById('live-score-a');
+  const oa = document.getElementById('live-overs-a');
+  if (sa) sa.textContent = match.innings1Runs + '/' + match.innings1Wickets;
+  if (oa) oa.textContent = formatOvers(match.innings1Overs) + ' ov · RR: ' + (match.innings1RunRate || 0);
+  if (match.currentInnings === 2) {
+    const sb = document.getElementById('live-score-b');
+    const ob = document.getElementById('live-overs-b');
+    if (sb) sb.textContent = match.innings2Runs + '/' + match.innings2Wickets;
+    if (ob) ob.textContent = formatOvers(match.innings2Overs) + ' ov · RR: ' + (match.innings2RunRate || 0);
+  }
+}
+
+async function startInnings2(matchId) {
+  try {
+    await api('PATCH', `/matches/${matchId}/innings2/start`);
+    toast('✅ 2nd innings started!');
+    loadMatchForScoring();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+// Toss
+function openTossModal(matchId, teamAName, teamAId, teamBName, teamBId) {
+  document.getElementById('modal-toss')._matchId = matchId;
+  const sel = document.getElementById('toss-winner');
+  sel.innerHTML = `<option value="${teamAId}">${teamAName}</option><option value="${teamBId}">${teamBName}</option>`;
+  openModal('modal-toss');
+}
+
+async function saveToss() {
+  const matchId = document.getElementById('modal-toss')._matchId;
+  const tossWinnerId = parseInt(document.getElementById('toss-winner').value);
+  const decision = document.getElementById('toss-decision').value;
+  try {
+    await api('PATCH', `/matches/${matchId}/toss`, { tossWinnerId, decision });
+    closeModal('modal-toss');
+    toast('✅ Toss recorded! Match is LIVE!');
+    loadMatchForScoring();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+function confirmEndMatch(matchId, teamAName, teamAId, teamBName, teamBId) {
+  const winner = prompt(`Who won?\n1 = ${teamAName}\n2 = ${teamBName}\n3 = No Result\nEnter 1, 2, or 3:`);
+  if (!winner) return;
+  const winnerId = winner === '1' ? teamAId : winner === '2' ? teamBId : null;
+  const winnerName = winner === '1' ? teamAName : winner === '2' ? teamBName : null;
+  const desc = winnerId ? `${winnerName} won` : 'Match ended - No Result';
+  api('PATCH', `/matches/${matchId}/result`, { winnerId, resultDescription: desc })
+    .then(() => { toast('🏁 Match completed!'); loadMatchForScoring(); })
+    .catch(e => toast('❌ ' + e.message));
+}
+
+// WebSocket
+function subscribeToMatch(matchId) {
+  if (stompClient) stompClient.deactivate();
+  try {
+    stompClient = new StompJs.Client({
+      webSocketFactory: () => new SockJS(API_BASE + '/ws'),
+      onConnect: () => {
+        stompClient.subscribe('/topic/match/' + matchId, (msg) => {
+          const match = JSON.parse(msg.body);
+          updateLiveScoreDisplay(match);
+        });
+      }
+    });
+    stompClient.activate();
+  } catch(e) { /* WebSocket optional */ }
+}
+
+// ================================================================
+// LEADERBOARD
+// ================================================================
+async function loadLeaderboard() {
+  const tid = document.getElementById('leaderboard-tournament-select').value;
+  if (!tid) return;
+  try {
+    const data = await api('GET', `/leaderboard/${tid}`, null, false);
+    renderLeaderboard(data);
+  } catch(e) { document.getElementById('leaderboard-area').innerHTML = `<div class="empty"><div class="empty-title">${e.message}</div></div>`; }
+}
+
+function renderLeaderboard(data) {
+  document.getElementById('leaderboard-area').innerHTML = `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><span class="card-title">🏆 ${data.tournamentName} — Points Table</span></div>
+      <div class="card-body">
+        <table class="table">
+          <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th><th>Pts</th><th>NRR</th></tr></thead>
+          <tbody>
+            ${(data.standings || []).map(s => `
+              <tr class="rank-${s.rank}">
+                <td style="font-weight:700;font-size:15px;">${s.rank}</td>
+                <td><span class="team-dot" style="background:${s.teamColor || '#ccc'}"></span><strong>${s.teamName}</strong></td>
+                <td>${s.matchesPlayed}</td>
+                <td style="color:var(--green);font-weight:600;">${s.wins}</td>
+                <td style="color:var(--red);">${s.losses}</td>
+                <td>${s.draws}</td>
+                <td style="font-size:16px;font-weight:800;">${s.points}</td>
+                <td class="${s.netRunRate >= 0 ? 'nrr-pos' : 'nrr-neg'}">${s.netRunRate >= 0 ? '+' : ''}${s.netRunRate?.toFixed(3)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">🏏 Top Batsmen</span></div>
+        <table class="table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Runs</th><th>Avg</th></tr></thead>
+        <tbody>${(data.topBatsmen || []).map((p,i) => `<tr><td>${i+1}</td><td><strong>${p.name}</strong></td><td style="color:var(--gray-400)">${p.teamName}</td><td style="font-weight:700;color:var(--green)">${p.totalRuns}</td><td>${p.matchesPlayed > 0 ? (p.totalRuns/p.matchesPlayed).toFixed(1) : '—'}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">🎳 Top Bowlers</span></div>
+        <table class="table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Wkts</th><th>Avg</th></tr></thead>
+        <tbody>${(data.topBowlers || []).map((p,i) => `<tr><td>${i+1}</td><td><strong>${p.name}</strong></td><td style="color:var(--gray-400)">${p.teamName}</td><td style="font-weight:700;color:var(--red)">${p.totalWickets}</td><td>${p.totalWickets > 0 ? '—' : '—'}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ================================================================
+// PLAYERS
+// ================================================================
+async function loadTeamsForPlayers() {
+  const tid = document.getElementById('players-tournament-select').value;
+  const sel = document.getElementById('players-team-select');
+  sel.innerHTML = '<option value="">— Team —</option>';
+  if (!tid) return;
+  try {
+    const teams = await api('GET', `/teams/tournament/${tid}`, null, false);
+    teams.forEach(t => sel.innerHTML += `<option value="${t.id}">${t.name}</option>`);
+  } catch(e) {}
+}
+
+async function loadPlayers() {
+  const teamId = document.getElementById('players-team-select').value;
+  if (!teamId) return;
+  try {
+    const players = await api('GET', `/players/team/${teamId}`, null, false);
+    renderPlayers(players, teamId);
+  } catch(e) {}
+}
+
+function renderPlayers(players, teamId) {
+  document.getElementById('pl-team-id').value = teamId;
+  if (!players.length) {
+    document.getElementById('players-list').innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">No players yet</div><button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()" style="margin-top:12px;">Add First Player</button></div>`;
+    return;
+  }
+  document.getElementById('players-title').textContent = `${players[0].teamName} (${players.length} players)`;
+  document.getElementById('players-list').innerHTML = `
+    <table class="table">
+      <thead><tr><th>#</th><th>Player</th><th>Role</th><th>Style</th><th>M</th><th>Runs</th><th>Wkts</th></tr></thead>
+      <tbody>
+      ${players.map(p => `<tr>
+        <td style="color:var(--gray-400);font-weight:500;">${p.jerseyNumber || '—'}</td>
+        <td><strong>${p.name}</strong>${p.age ? `<span style="color:var(--gray-400);font-size:11px;margin-left:6px;">Age ${p.age}</span>` : ''}</td>
+        <td><span class="badge badge-${getRoleBadge(p.role)}">${p.role?.replace('_',' ')}</span></td>
+        <td style="font-size:12px;color:var(--gray-400);">${p.battingStyle?.replace('_',' ')||'—'}</td>
+        <td>${p.matchesPlayed}</td>
+        <td style="font-weight:600;color:var(--green)">${p.totalRuns}</td>
+        <td style="font-weight:600;color:var(--red)">${p.totalWickets}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openAddPlayerModal() {
+  const teamId = document.getElementById('players-team-select').value;
+  if (!teamId) { toast('Please select a team first'); return; }
+  document.getElementById('pl-team-id').value = teamId;
+  document.getElementById('pl-name').value = '';
+  openModal('modal-add-player');
+}
+
+async function addPlayer() {
+  const teamId = document.getElementById('pl-team-id').value;
+  const name = document.getElementById('pl-name').value.trim();
+  if (!name) { toast('❌ Player name required'); return; }
+  try {
+    await api('POST', '/players', {
+      name, teamId: parseInt(teamId),
+      jerseyNumber: parseInt(document.getElementById('pl-jersey').value) || null,
+      age: parseInt(document.getElementById('pl-age').value) || null,
+      role: document.getElementById('pl-role').value,
+      battingStyle: document.getElementById('pl-bat').value,
+      bowlingStyle: document.getElementById('pl-bowl').value || null,
+      phone: document.getElementById('pl-phone').value || null
+    });
+    closeModal('modal-add-player');
+    toast('✅ Player added!');
+    loadPlayers();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+// ================================================================
+// UI HELPERS
+// ================================================================
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(n => { if (n.textContent.toLowerCase().includes(name.substring(0,5).toLowerCase())) n.classList.add('active'); });
+  // Load page data
+  if (name === 'tournaments') loadTournamentsPage();
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'scoring') loadLiveMatchesForScoring();
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function showModalError(modalId, msg) {
+  const el = document.getElementById('modal-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+function toast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function formatOvers(overs) {
+  if (!overs) return '0.0';
+  const o = Math.floor(overs);
+  const b = Math.round((overs - o) * 10);
+  return `${o}.${b}`;
+}
+
+function getRoleBadge(role) {
+  return { BATSMAN: 'upcoming', BOWLER: 'ongoing', ALL_ROUNDER: 'completed', WICKET_KEEPER: 'live' }[role] || 'upcoming';
+}
+
+function copyMatchLink() {
+  const code = document.querySelector('code')?.textContent;
+  if (code) { navigator.clipboard.writeText(code).then(() => toast('✅ Link copied!')); }
+}
+
+function copyLink(path) {
+  navigator.clipboard.writeText(window.location.origin + path).then(() => toast('✅ Link copied!'));
+}
+
+function copyLeaderboardLink() {
+  const tid = document.getElementById('leaderboard-tournament-select').value;
+  if (tid) navigator.clipboard.writeText(window.location.origin + '?leaderboard=' + tid).then(() => toast('✅ Leaderboard link copied!'));
+}
+
+function sharePublic(type, id) {
+  const url = window.location.origin + `?${type}=${id}`;
+  navigator.clipboard.writeText(url).then(() => toast('✅ Link copied: ' + url));
+}
+
+function shareWhatsApp() {
+  const link = document.querySelector('code')?.textContent || window.location.href;
+  window.open(`https://wa.me/?text=${encodeURIComponent('🏏 Live Cricket Score: ' + link)}`, '_blank');
+}
+
+// ================================================================
+// PUBLIC MATCH VIEW — ?match=CODE
+// ================================================================
+async function checkPublicView() {
+  const params = new URLSearchParams(window.location.search);
+  const matchCode = params.get('match');
+  if (!matchCode) return false;
+  document.body.innerHTML = `<div style="max-width:600px;margin:0 auto;padding:20px;font-family:-apple-system,sans-serif;">
+    <div style="text-align:center;margin-bottom:20px;font-size:24px;font-weight:800;color:#1D9E75;">🏏 Live Score</div>
+    <div id="public-score">Loading...</div>
+    <div style="text-align:center;margin-top:20px;font-size:12px;color:#9CA3AF;">Live updates every 10 seconds · <a href="${window.location.origin}">Powered by Tournament Manager</a></div>
+  </div>`;
+  const load = async () => {
+    try {
+      const data = await api('GET', `/matches/public/${matchCode}`, null, false);
+      document.getElementById('public-score').innerHTML = `
+        <div style="background:linear-gradient(135deg,#0F6E56,#1D9E75);border-radius:12px;padding:24px;color:white;margin-bottom:16px;">
+          <div style="font-size:12px;opacity:0.8;margin-bottom:12px;">${data.tournamentName} · Match #${data.matchNumber}</div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:16px;text-align:center;">
+            <div><div style="font-size:13px;font-weight:600;opacity:0.9">${data.teamAName}</div><div style="font-size:40px;font-weight:800">${data.innings1Runs}/${data.innings1Wickets}</div><div style="font-size:12px;opacity:0.8">${formatOvers(data.innings1Overs)} overs</div></div>
+            <div style="font-size:20px;opacity:0.5;font-weight:700;">VS</div>
+            <div><div style="font-size:13px;font-weight:600;opacity:0.9">${data.teamBName}</div><div style="font-size:40px;font-weight:800">${data.currentInnings === 2 ? data.innings2Runs + '/' + data.innings2Wickets : '—'}</div><div style="font-size:12px;opacity:0.8">${data.target ? 'Target: ' + data.target : 'Batting 2nd'}</div></div>
+          </div>
+          ${data.resultDescription ? `<div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.2);font-weight:700;">🏆 ${data.resultDescription}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <a href="https://wa.me/?text=${encodeURIComponent('🏏 Live Score: ' + data.teamAName + ' vs ' + data.teamBName + ' | ' + data.innings1Runs + '/' + data.innings1Wickets + ' | ' + window.location.href)}" target="_blank" style="background:#25D366;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Share on WhatsApp</a>
+          <a href="${window.location.origin}" style="background:#E1F5EE;color:#0F6E56;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">View All Matches</a>
+        </div>`;
+    } catch(e) { document.getElementById('public-score').innerHTML = `<div style="text-align:center;padding:40px;color:#9CA3AF;">Match not found or not available yet</div>`; }
+  };
+  await load();
+  setInterval(load, 10000);
+  return true;
+}
+
+// ================================================================
+// BOOT
+// ================================================================
+window.addEventListener('load', async () => {
+  const isPublic = await checkPublicView();
+  if (isPublic) return;
+  if (token && currentUser) {
+    initApp();
+  }
+});
+</script>
+</body>
+</html>
