@@ -22,6 +22,15 @@ public class TeamController {
 
     private final TeamService teamService;
 
+    // ✅ ADD THIS (missing endpoint — IMPORTANT)
+    @GetMapping
+    @Operation(summary = "Get all teams (public)")
+    public ResponseEntity<ApiResponse<List<TeamDto.Response>>> getAllTeams() {
+        return ResponseEntity.ok(
+                ApiResponse.success(teamService.getAllTeams(), "Teams fetched")
+        );
+    }
+
     @PostMapping
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Add a team to a tournament")
@@ -35,13 +44,17 @@ public class TeamController {
     @Operation(summary = "Get all teams in a tournament (public)")
     public ResponseEntity<ApiResponse<List<TeamDto.Response>>> getByTournament(
             @PathVariable Long tournamentId) {
-        return ResponseEntity.ok(ApiResponse.success(teamService.getTeamsByTournament(tournamentId)));
+        return ResponseEntity.ok(
+                ApiResponse.success(teamService.getTeamsByTournament(tournamentId))
+        );
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get team by ID (public)")
     public ResponseEntity<ApiResponse<TeamDto.Response>> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success(teamService.getById(id)));
+        return ResponseEntity.ok(
+                ApiResponse.success(teamService.getById(id))
+        );
     }
 
     @PutMapping("/{id}")
@@ -50,7 +63,9 @@ public class TeamController {
     public ResponseEntity<ApiResponse<TeamDto.Response>> update(
             @PathVariable Long id,
             @Valid @RequestBody TeamDto.CreateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(teamService.update(id, request), "Team updated"));
+        return ResponseEntity.ok(
+                ApiResponse.success(teamService.update(id, request), "Team updated")
+        );
     }
 
     @DeleteMapping("/{id}")
@@ -58,6 +73,8 @@ public class TeamController {
     @Operation(summary = "Remove a team")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         teamService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success(null, "Team deleted"));
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Team deleted")
+        );
     }
 }
